@@ -16,6 +16,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
 from draw import (
+    _fuzzy_substring,
     load_data, parse_args, draw_random, draw_themed, draw_from_pool,
     has_conflict, _normalize_conflicts, fuzzy_match, find_trait,
     theme_match, format_output, format_single_card, format_candidates_json,
@@ -72,10 +73,10 @@ def has_similar_pair(keys, trait_dict):
             sims_a = trait_dict[a].get("similar_traits", [])
             sims_b = trait_dict[b].get("similar_traits", [])
             for s in sims_a:
-                if len(s) >= 2 and (s in b or b in s):
+                if _fuzzy_substring(s, b):
                     return True, a, b, "a_sim_of_b"
             for s in sims_b:
-                if len(s) >= 2 and (s in a or a in s):
+                if _fuzzy_substring(s, a):
                     return True, a, b, "b_sim_of_a"
     return False, None, None, None
 
@@ -973,6 +974,36 @@ def test_cached_norm_conflicts():
     assert_test(mismatch == 0, 'negative cached matches live', f'{mismatch} mismatches')
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 24. FUZZY SUBSTRING HELPER
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_fuzzy_substring_helper():
+    """24. Test _fuzzy_substring helper edge cases."""
+    print("\n── 24. Fuzzy Substring Helper ──")
+    
+    # Exact match
+    assert_test(_fuzzy_substring("test", "test") == True, "exact match returns True")
+    
+    # Substring match
+    assert_test(_fuzzy_substring("hello", "hello world") == True, "substring match returns True")
+    assert_test(_fuzzy_substring("world", "hello world") == True, "reverse substring match returns True")
+    
+    # No match
+    assert_test(_fuzzy_substring("abc", "xyz") == False, "no match returns False")
+    
+    # Single char with min_len=2 returns False
+    assert_test(_fuzzy_substring("a", "abc") == False, "single char with min_len=2 returns False")
+    
+    # Single char with min_len=1 returns True
+    assert_test(_fuzzy_substring("a", "abc", min_len=1) == True, "single char with min_len=1 returns True")
+    
+    # Empty string returns False
+    assert_test(_fuzzy_substring("", "test") == False, "empty string returns False")
+    assert_test(_fuzzy_substring("test", "") == False, "empty string in second arg returns False")
+
 # RUN ALL
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1006,6 +1037,7 @@ if __name__ == "__main__":
     test_tension_quantification()
     test_data_quality_adversarial()
     test_cached_norm_conflicts()
+    test_fuzzy_substring_helper()
 
     print(f"\n{'═' * 60}")
     print(f"  RESULTS: {passed} passed, {failed} failed")

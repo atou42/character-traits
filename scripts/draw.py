@@ -92,6 +92,13 @@ def parse_args(argv):
     return config
 
 
+def _fuzzy_substring(a, b, min_len=2):
+    """Check if a is substring of b or b is substring of a."""
+    if not a or not b:
+        return False
+    return len(a) >= min_len and (a in b or b in a)
+
+
 def fuzzy_match(name, target_dict):
     """Match a trait name to actual keys, allowing minor differences."""
     if name in target_dict:
@@ -144,7 +151,7 @@ def _cross_conflicts(pos_keys, neg_keys, pos, neg):
                 fwd = True
             else:
                 for c in p_conflicts:
-                    if len(c) >= 2 and (c in nk or nk in c):
+                    if _fuzzy_substring(c, nk):
                         fwd = True
                         break
             # Reverse: negative's conflicts mention this positive
@@ -153,7 +160,7 @@ def _cross_conflicts(pos_keys, neg_keys, pos, neg):
                 rev = True
             else:
                 for c in n_conflicts:
-                    if len(c) >= 2 and (c in pk or pk in c):
+                    if _fuzzy_substring(c, pk):
                         rev = True
                         break
             if fwd or rev:
@@ -185,14 +192,14 @@ def has_conflict(key, existing_keys, trait_dict):
             return True
         # Fuzzy: only if conflict substring is >= 2 chars and is substantial part of ek
         for c in conflicts:
-            if len(c) >= 2 and (c in ek or ek in c):
+            if _fuzzy_substring(c, ek):
                 return True
         # Reverse: existing key's conflicts mention this key
         ek_conflicts = trait_dict[ek].get("_norm_conflicts", [])
         if key in ek_conflicts:
             return True
         for ec in ek_conflicts:
-            if len(ec) >= 2 and (ec in key or key in ec):
+            if _fuzzy_substring(ec, key):
                 return True
     return False
 
@@ -266,14 +273,14 @@ def draw_from_pool(keys, trait_dict, count, config, initial_chosen=None):
             sims = trait_dict[k].get("similar_traits", [])
             for ck in chosen:
                 for s in sims:
-                    if len(s) >= 2 and (s in ck or ck in s):
+                    if _fuzzy_substring(s, ck):
                         skip = True
                         break
                 if skip:
                     break
                 ck_sims = trait_dict[ck].get("similar_traits", [])
                 for s in ck_sims:
-                    if len(s) >= 2 and (s in k or k in s):
+                    if _fuzzy_substring(s, k):
                         skip = True
                         break
                 if skip:
@@ -494,7 +501,7 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
                     found = True
                 else:
                     for c in n_conflicts:
-                        if len(c) >= 2 and (c in pk or pk in c):
+                        if _fuzzy_substring(c, pk):
                             found = True
                             break
                 if not found:
@@ -503,7 +510,7 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
                         found = True
                     else:
                         for c in p_conflicts:
-                            if len(c) >= 2 and (c in k or k in c):
+                            if _fuzzy_substring(c, k):
                                 found = True
                                 break
                 if found:
