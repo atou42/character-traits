@@ -6082,8 +6082,8 @@
   },
   "活泼友好的；善于交际的": {
     "name_cn": "活泼友好的；善于交际的",
-    "name_en": "",
-    "definition": "",
+    "name_en": "Sociable",
+    "definition": "性格外向开朗，喜欢与人交往",
     "category": [
       "身份",
       "互动"
@@ -6706,8 +6706,8 @@
   },
   "乐观向上的，满足的": {
     "name_cn": "乐观向上的，满足的",
-    "name_en": "",
-    "definition": "",
+    "name_en": "Optimistic and Content",
+    "definition": "对生活持积极态度，感到满足和幸福",
     "category": [
       "身份",
       "互动"
