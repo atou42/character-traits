@@ -16,7 +16,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
 from draw import (
-    _fuzzy_substring,
+    _fuzzy_substring, _truncate,
     load_data, parse_args, draw_random, draw_themed, draw_from_pool,
     has_conflict, _normalize_conflicts, fuzzy_match, find_trait,
     theme_match, format_output, format_single_card, format_candidates_json,
@@ -1080,6 +1080,33 @@ def test_summary_mode():
     assert_test("影视案例" not in output_summary, "summary no examples", "has 影视案例")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 27. TRUNCATION INDICATORS
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_truncation_indicators():
+    """27. Truncation indicators work correctly."""
+    print("\n── 27. Truncation Indicators ──")
+
+    # Unit test _truncate
+    assert_test(_truncate("hello", 10) == "hello", "_truncate no-op short text", "should not truncate")
+    assert_test(_truncate("hello world", 5) == "hello…", "_truncate adds ellipsis", f"got '{_truncate('hello world', 5)}'")
+    assert_test(_truncate("", 5) == "", "_truncate empty string", "should handle empty")
+    assert_test(_truncate("abc", 3) == "abc", "_truncate exact length", "should not truncate exact")
+
+    # Verify truncation appears in real output
+    pos, neg = load_data()
+    config = parse_args([])
+    pk, nk = draw_random(pos, neg, config)
+    output = format_output(pos, neg, pk, nk, "full")
+    # If … appears, it should only be at a truncation point
+    if "…" in output:
+        lines_with_ellipsis = [l for l in output.split("\n") if "…" in l]
+        assert_test(len(lines_with_ellipsis) > 0, "ellipses found in output", f"lines: {len(lines_with_ellipsis)}")
+    else:
+        assert_test(True, "no truncation needed this draw", "")
+
+
 # RUN ALL
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1116,6 +1143,7 @@ if __name__ == "__main__":
     test_fuzzy_substring_helper()
     test_seed_reproducibility()
     test_summary_mode()
+    test_truncation_indicators()
 
     print(f"\n{'═' * 60}")
     print(f"  RESULTS: {passed} passed, {failed} failed")

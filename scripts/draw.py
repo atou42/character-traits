@@ -103,6 +103,13 @@ def _fuzzy_substring(a, b, min_len=2):
     return len(a) >= min_len and (a in b or b in a)
 
 
+def _truncate(text, limit):
+    """Truncate text to limit, adding … if truncated."""
+    if not text or len(text) <= limit:
+        return text
+    return text[:limit] + "…"
+
+
 def fuzzy_match(name, target_dict):
     """Match a trait name to actual keys, allowing minor differences."""
     if name in target_dict:
@@ -451,14 +458,14 @@ def _render_trait_card(card, key, index, show_depth, card_type, pos_keys=None, p
             lines.append(f"- **可能成因**：{'；'.join(causes)}")
         ex = card.get("examples", "")
         if ex:
-            lines.append(f"- **影视案例**：{ex[:200]}")
+            lines.append(f"- **影视案例**：{_truncate(ex, 200)}")
     elif show_depth == "summary":
         # Summary mode: full aspects, no verbose fields
         lines.append(f"- **正面**：{pa}")
         lines.append(f"- **负面**：{na}")
     else:  # compact (shouldn't reach here due to early return)
-        lines.append(f"- **正面**：{pa[:100]}")
-        lines.append(f"- **负面**：{na[:100]}")
+        lines.append(f"- **正面**：{_truncate(pa, 100)}")
+        lines.append(f"- **负面**：{_truncate(na, 100)}")
 
     # Positive-only fields
     if card_type == "positive":
@@ -480,7 +487,7 @@ def _render_trait_card(card, key, index, show_depth, card_type, pos_keys=None, p
             elif show_depth == "summary":
                 lines.append(f"- **克服路径**：{ho}")
             else:  # compact (shouldn't reach here)
-                lines.append(f"- **克服路径**：{ho[:100]}")
+                lines.append(f"- **克服路径**：{_truncate(ho, 100)}")
 
         # Tension annotation with positive traits
         if pos_keys and pos_dict:
@@ -541,7 +548,7 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
             ho = t.get("how_to_overcome", "")
             if ho:
                 name = t['name_cn'].rstrip('的')
-                lines.append(f"- **{name}的克服方向**：{ho[:150]}")
+                lines.append(f"- **{name}的克服方向**：{_truncate(ho, 150)}")
         # Challenging scenarios from first positive trait
         if pos_keys:
             scenarios = pos[pos_keys[0]].get("challenging_scenarios", [])[:2]
