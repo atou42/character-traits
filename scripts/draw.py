@@ -398,6 +398,107 @@ def draw_themed(query, pos, neg, config):
     return pos_keys, neg_keys
 
 
+def _render_trait_card(card, key, index, show_depth, card_type, pos_keys=None, pos_dict=None):
+    """Render a single trait card as markdown lines.
+
+    Args:
+        card: The trait card dict
+        key: The trait's key (used for tension checking in negative cards)
+        index: Card number (1-indexed)
+        show_depth: "compact", "summary", or "full"
+        card_type: "positive" or "negative"
+        pos_keys: List of drawn positive keys (only for negative cards, for tension)
+        pos_dict: Positive traits dict (only for negative cards, for tension)
+
+    Returns:
+        list of markdown lines
+    """
+    lines = []
+
+    # Compact mode: single line
+    if show_depth == "compact":
+        lines.append(f"**{card['name_cn']}** ({card['name_en']}) — {card['definition']}")
+        return lines
+
+    # Full/Summary mode: header + definition
+    lines.append(f"**{index}. {card['name_cn']}** ({card['name_en']})")
+    lines.append(f"> {card['definition']}\n")
+
+    # Behavioral examples
+    behaviors = card.get("related_behaviors", [])[:3]
+    if behaviors:
+        lines.append(f"- **行为示例**：{'；'.join(behaviors)}")
+
+    # Positive/negative aspects
+    pa = card.get("positive_aspects", "")
+    na = card.get("negative_aspects", "")
+    if show_depth == "full":
+        lines.append(f"- **正面**：{pa}")
+        lines.append(f"- **负面**：{na}")
+        # Full mode extras
+        thoughts = card.get("related_thoughts", [])[:3]
+        if thoughts:
+            lines.append(f"- **内心独白**：{'；'.join(thoughts)}")
+        emotions = card.get("related_emotions", [])
+        if emotions:
+            lines.append(f"- **关联情绪**：{'、'.join(emotions)}")
+        causes = card.get("possible_causes", [])[:3]
+        if causes:
+            lines.append(f"- **可能成因**：{'；'.join(causes)}")
+        ex = card.get("examples", "")
+        if ex:
+            lines.append(f"- **影视案例**：{ex[:200]}")
+    else:  # summary mode
+        lines.append(f"- **正面**：{pa[:100]}")
+        lines.append(f"- **负面**：{na[:100]}")
+
+    # Positive-only fields
+    if card_type == "positive":
+        cats = [c for c in card.get("category", []) if c in VALID_CATS]
+        if cats:
+            lines.append(f"- **维度**：{'、'.join(cats)}")
+        if show_depth == "full":
+            scenarios = card.get("challenging_scenarios", [])
+            if scenarios:
+                lines.append(f"- **考验情境**：{'；'.join(scenarios[:3])}")
+
+    # Negative-only fields
+    if card_type == "negative":
+        ho = card.get("how_to_overcome", "")
+        if ho:
+            lines.append(f"- **克服路径**：{ho if show_depth == 'full' else ho[:100]}")
+
+        # Tension annotation with positive traits
+        if pos_keys and pos_dict:
+            conflicts_with_pos = []
+            n_conflicts = card.get("_norm_conflicts", [])
+            for pk in pos_keys:
+                found = False
+                if pk in n_conflicts:
+                    found = True
+                else:
+                    for c in n_conflicts:
+                        if _fuzzy_substring(c, pk):
+                            found = True
+                            break
+                if not found:
+                    p_conflicts = pos_dict[pk].get("_norm_conflicts", [])
+                    if key in p_conflicts:
+                        found = True
+                    else:
+                        for c in p_conflicts:
+                            if _fuzzy_substring(c, key):
+                                found = True
+                                break
+                if found:
+                    conflicts_with_pos.append(pk)
+            if conflicts_with_pos:
+                lines.append(f"- **张力**：⚡ 与「{'、'.join(conflicts_with_pos)}」形成张力")
+
+    lines.append("")
+    return lines
+
+
 def format_output(pos, neg, pos_keys, neg_keys, show_depth):
     """Format the draw result as markdown."""
     lines = ["## 角色特质组合\n"]
@@ -409,115 +510,14 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
 
     lines.append("### 正面特质\n")
     for i, k in enumerate(pos_keys, 1):
-        t = pos[k]
-        if show_depth == "compact":
-            lines.append(f"**{t['name_cn']}** ({t['name_en']}) — {t['definition']}")
-            continue
-
-        lines.append(f"**{i}. {t['name_cn']}** ({t['name_en']})")
-        lines.append(f"> {t['definition']}\n")
-
-        behaviors = t.get("related_behaviors", [])[:3]
-        if behaviors:
-            lines.append(f"- **行为示例**：{'；'.join(behaviors)}")
-
-        pa = t.get("positive_aspects", "")
-        na = t.get("negative_aspects", "")
-        if show_depth == "full":
-            lines.append(f"- **正面**：{pa}")
-            lines.append(f"- **负面**：{na}")
-            thoughts = t.get("related_thoughts", [])[:3]
-            if thoughts:
-                lines.append(f"- **内心独白**：{'；'.join(thoughts)}")
-            emotions = t.get("related_emotions", [])
-            if emotions:
-                lines.append(f"- **关联情绪**：{'、'.join(emotions)}")
-            causes = t.get("possible_causes", [])[:3]
-            if causes:
-                lines.append(f"- **可能成因**：{'；'.join(causes)}")
-            ex = t.get("examples", "")
-            if ex:
-                lines.append(f"- **影视案例**：{ex[:200]}")
-            scenarios = t.get("challenging_scenarios", [])
-            if scenarios:
-                lines.append(f"- **考验情境**：{'；'.join(scenarios[:3])}")
-        else:
-            lines.append(f"- **正面**：{pa[:100]}")
-            lines.append(f"- **负面**：{na[:100]}")
-
-        cats = [c for c in t.get("category", []) if c in VALID_CATS]
-        if cats:
-            lines.append(f"- **维度**：{'、'.join(cats)}")
-        lines.append("")
+        card_lines = _render_trait_card(pos[k], k, i, show_depth, "positive")
+        lines.extend(card_lines)
 
     if neg_keys:
         lines.append("### 负面特质\n")
         for i, k in enumerate(neg_keys, 1):
-            t = neg[k]
-            if show_depth == "compact":
-                lines.append(f"**{t['name_cn']}** ({t['name_en']}) — {t['definition']}")
-                continue
-
-            lines.append(f"**{i}. {t['name_cn']}** ({t['name_en']})")
-            lines.append(f"> {t['definition']}\n")
-
-            behaviors = t.get("related_behaviors", [])[:3]
-            if behaviors:
-                lines.append(f"- **行为示例**：{'；'.join(behaviors)}")
-
-            pa = t.get("positive_aspects", "")
-            na = t.get("negative_aspects", "")
-            if show_depth == "full":
-                lines.append(f"- **正面**：{pa}")
-                lines.append(f"- **负面**：{na}")
-                thoughts = t.get("related_thoughts", [])[:3]
-                if thoughts:
-                    lines.append(f"- **内心独白**：{'；'.join(thoughts)}")
-                emotions = t.get("related_emotions", [])
-                if emotions:
-                    lines.append(f"- **关联情绪**：{'、'.join(emotions)}")
-                causes = t.get("possible_causes", [])[:3]
-                if causes:
-                    lines.append(f"- **可能成因**：{'；'.join(causes)}")
-                ex = t.get("examples", "")
-                if ex:
-                    lines.append(f"- **影视案例**：{ex[:200]}")
-                ho = t.get("how_to_overcome", "")
-                if ho:
-                    lines.append(f"- **克服路径**：{ho}")
-            else:
-                lines.append(f"- **正面**：{pa[:100]}")
-                lines.append(f"- **负面**：{na[:100]}")
-                ho = t.get("how_to_overcome", "")
-                if ho:
-                    lines.append(f"- **克服路径**：{ho[:100]}")
-
-            # Check tension with positive traits (fuzzy-aware)
-            conflicts_with_pos = []
-            n_conflicts = t.get("_norm_conflicts", [])
-            for pk in pos_keys:
-                found = False
-                if pk in n_conflicts:
-                    found = True
-                else:
-                    for c in n_conflicts:
-                        if _fuzzy_substring(c, pk):
-                            found = True
-                            break
-                if not found:
-                    p_conflicts = pos[pk].get("_norm_conflicts", [])
-                    if k in p_conflicts:
-                        found = True
-                    else:
-                        for c in p_conflicts:
-                            if _fuzzy_substring(c, k):
-                                found = True
-                                break
-                if found:
-                    conflicts_with_pos.append(pk)
-            if conflicts_with_pos:
-                lines.append(f"- **张力**：⚡ 与「{'、'.join(conflicts_with_pos)}」形成张力")
-            lines.append("")
+            card_lines = _render_trait_card(neg[k], k, i, show_depth, "negative", pos_keys, pos)
+            lines.extend(card_lines)
 
     # Arc hints
     if show_depth != "compact" and neg_keys:
