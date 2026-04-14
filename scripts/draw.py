@@ -36,6 +36,7 @@ def parse_args(argv):
         "ensure_tension": True,
         "cross_category": True,
         "avoid_similar": True,
+        "avoid_same_side_conflict": True,
         "show_depth": "full",
         "query": None,
         "analyze": False,
@@ -63,6 +64,9 @@ def parse_args(argv):
             i += 1
         elif arg == "--no-similar":
             config["avoid_similar"] = False
+            i += 1
+        elif arg == "--no-side-conflict":
+            config["avoid_same_side_conflict"] = False
             i += 1
         elif arg == "--analyze":
             config["analyze"] = True
@@ -92,6 +96,55 @@ def fuzzy_match(name, target_dict):
         if name in key or key in name:
             return key
     return None
+
+
+def _normalize_conflicts(conflicts):
+    """Clean up conflicting_traits: join split entries, skip junk."""
+    result = []
+    skip_next = False
+    for i, c in enumerate(conflicts):
+        if skip_next:
+            skip_next = False
+            continue
+        # Skip single-char noise like '的'
+        if len(c) <= 1:
+            # Check if this is a split: previous + this = real trait name
+            if result and result[-1] + c in ('有道德的', '胆怯的', '负责的'):
+                result[-1] = result[-1] + c
+                continue
+            continue
+        # Check if next entry is a continuation split (e.g. '胆怯' + '的')
+        if i + 1 < len(conflicts) and len(conflicts[i + 1]) == 1:
+            combined = c + conflicts[i + 1]
+            if len(combined) >= 3:
+                result.append(combined)
+                skip_next = True
+                continue
+        result.append(c)
+    return result
+
+
+def has_conflict(key, existing_keys, trait_dict):
+    """Check if key conflicts with any key in existing_keys via conflicting_traits."""
+    raw_conflicts = trait_dict[key].get("conflicting_traits", [])
+    conflicts = _normalize_conflicts(raw_conflicts)
+    for ek in existing_keys:
+        # Direct match
+        if ek in conflicts:
+            return True
+        # Fuzzy: only if conflict substring is >= 2 chars and is substantial part of ek
+        for c in conflicts:
+            if len(c) >= 2 and (c in ek or ek in c):
+                return True
+        # Reverse: existing key's conflicts mention this key
+        ek_raw = trait_dict[ek].get("conflicting_traits", [])
+        ek_conflicts = _normalize_conflicts(ek_raw)
+        if key in ek_conflicts:
+            return True
+        for ec in ek_conflicts:
+            if len(ec) >= 2 and (ec in key or key in ec):
+                return True
+    return False
 
 
 def find_trait(query, pos, neg):
@@ -141,45 +194,96 @@ def theme_match(query, pos, neg):
     return pos_scored, neg_scored
 
 
+def draw_from_pool(keys, trait_dict, count, config, initial_chosen=None):
+    """Draw N traits from a pool, applying same-side conflict and similar avoidance."""
+    if count <= 0 or not keys:
+        return []
+
+    initial = list(initial_chosen) if initial_chosen else []
+    chosen = list(initial)  # track for conflict checks, but we'll slice them off at the end
+    candidates = list(keys)
+    random.shuffle(candidates)
+
+    for k in candidates:
+        if len(chosen) >= count:
+            break
+        # Same-side conflict check
+        if config["avoid_same_side_conflict"] and has_conflict(k, chosen, trait_dict):
+            continue
+        # Similar avoidance check
+        if config["avoid_similar"]:
+            skip = False
+            sims = trait_dict[k].get("similar_traits", [])
+            for ck in chosen:
+                for s in sims:
+                    if len(s) >= 2 and (s in ck or ck in s):
+                        skip = True
+                        break
+                if skip:
+                    break
+                ck_sims = trait_dict[ck].get("similar_traits", [])
+                for s in ck_sims:
+                    if len(s) >= 2 and (s in k or k in s):
+                        skip = True
+                        break
+                if skip:
+                    break
+            if skip:
+                continue
+        chosen.append(k)
+
+    # Fallback: if we couldn't fill, just take remaining
+    if len(chosen) < count:
+        remaining = [k for k in keys if k not in chosen]
+        chosen.extend(remaining[:count - len(chosen)])
+
+    # Only return newly chosen items (exclude initial_chosen that were pre-seeded)
+    new_picks = [k for k in chosen if k not in initial]
+    # Fallback for unfilled: try remaining keys with conflict check
+    if len(new_picks) < count:
+        remaining = [k for k in keys if k not in chosen]
+        for k in remaining:
+            if len(new_picks) >= count:
+                break
+            if config.get("avoid_same_side_conflict") and has_conflict(k, chosen, trait_dict):
+                continue
+            new_picks.append(k)
+            chosen.append(k)
+    return new_picks[:count]
+
+
 def draw_random(pos, neg, config):
     """Draw a random trait combination."""
     pos_count = config["positive_count"]
     neg_count = config["negative_count"]
 
-    def draw_positives():
-        keys = list(pos.keys())
-        for _ in range(100):
-            sampled = random.sample(keys, pos_count)
-            if config["cross_category"]:
-                cats = set()
-                for k in sampled:
-                    for c in pos[k].get("category", []):
-                        if c in VALID_CATS:
-                            cats.add(c)
-                if len(cats) < 2:
-                    continue
-            if config["avoid_similar"]:
-                skip = False
-                for k in sampled:
-                    sims = pos[k].get("similar_traits", [])
-                    for other_k in sampled:
-                        if other_k == k:
-                            continue
-                        for s in sims:
-                            if s in other_k or other_k in s:
-                                skip = True
-                                break
-                if skip:
-                    continue
-            return sampled
-        return random.sample(keys, pos_count)
+    # Draw positives with retry for cross-category
+    pos_keys = []
+    all_pos = list(pos.keys())
+    for _ in range(100):
+        sampled = draw_from_pool(all_pos, pos, pos_count, config)
+        if config["cross_category"] and pos_count >= 2:
+            cats = set()
+            for k in sampled:
+                for c in pos[k].get("category", []):
+                    if c in VALID_CATS:
+                        cats.add(c)
+            if len(cats) < 2:
+                random.shuffle(all_pos)
+                continue
+        pos_keys = sampled
+        break
 
-    pos_keys = draw_positives()
+    if not pos_keys:
+        pos_keys = draw_from_pool(all_pos, pos, pos_count, config)
+
+    # Draw negatives
     neg_keys = []
 
     # Tension: pick one negative from first positive's conflicting_traits
     if config["ensure_tension"] and neg_count > 0:
         conflicts = pos[pos_keys[0]].get("conflicting_traits", [])
+        conflicts = _normalize_conflicts(conflicts)
         random.shuffle(conflicts)
         for ct in conflicts:
             match = fuzzy_match(ct, neg)
@@ -187,11 +291,12 @@ def draw_random(pos, neg, config):
                 neg_keys.append(match)
                 break
 
-    # Fill remaining
+    # Fill remaining negatives with same-side conflict avoidance
     remaining = [k for k in neg if k not in neg_keys]
     need = neg_count - len(neg_keys)
-    if need > 0 and remaining:
-        neg_keys.extend(random.sample(remaining, min(need, len(remaining))))
+    if need > 0:
+        extra = draw_from_pool(remaining, neg, need, config, initial_chosen=neg_keys)
+        neg_keys.extend(extra)
 
     return pos_keys, neg_keys
 
@@ -206,7 +311,7 @@ def draw_themed(query, pos, neg, config):
     # Pick from top candidates with some randomness
     top_n = min(max(pos_count * 3, 10), len(pos_scored))
     candidates = [k for k, _ in pos_scored[:top_n]]
-    pos_keys = random.sample(candidates, min(pos_count, len(candidates)))
+    pos_keys = draw_from_pool(candidates, pos, pos_count, config)
 
     top_n_neg = min(max(neg_count * 3, 10), len(neg_scored))
     neg_candidates = [k for k, _ in neg_scored[:top_n_neg]]
@@ -215,6 +320,7 @@ def draw_themed(query, pos, neg, config):
     # Try tension first
     if config["ensure_tension"] and neg_count > 0:
         conflicts = pos[pos_keys[0]].get("conflicting_traits", [])
+        conflicts = _normalize_conflicts(conflicts)
         for ct in conflicts:
             match = fuzzy_match(ct, neg)
             if match and match in neg_candidates:
@@ -223,8 +329,9 @@ def draw_themed(query, pos, neg, config):
 
     remaining = [k for k in neg_candidates if k not in neg_keys]
     need = neg_count - len(neg_keys)
-    if need > 0 and remaining:
-        neg_keys.extend(random.sample(remaining, min(need, len(remaining))))
+    if need > 0:
+        extra = draw_from_pool(remaining, neg, need, config, initial_chosen=neg_keys)
+        neg_keys.extend(extra)
 
     return pos_keys, neg_keys
 
@@ -301,10 +408,10 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
                     lines.append(f"- **内心独白**：{'；'.join(thoughts)}")
                 emotions = t.get("related_emotions", [])
                 if emotions:
-                    lines.append(f"- **关联情绪**：{"、".join(emotions)}")
+                    lines.append(f"- **关联情绪**：{'、'.join(emotions)}")
                 causes = t.get("possible_causes", [])[:3]
                 if causes:
-                    lines.append(f"- **可能成因**：{"；".join(causes)}")
+                    lines.append(f"- **可能成因**：{'；'.join(causes)}")
                 ex = t.get("examples", "")
                 if ex:
                     lines.append(f"- **影视案例**：{ex[:200]}")
@@ -340,7 +447,6 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
         if pos_keys:
             scenarios = pos[pos_keys[0]].get("challenging_scenarios", [])[:2]
             if scenarios:
-                name = pos[pos_keys[0]]["name_cn"]
                 name = pos[pos_keys[0]]['name_cn'].rstrip('的')
                 lines.append(f"- **{name}的考验情境**：{'；'.join(scenarios)}")
 
@@ -404,7 +510,6 @@ def format_single_card(card, card_type):
     return "\n".join(lines)
 
 
-
 def format_candidates_json(pos, neg, pos_keys, neg_keys):
     """Output candidate pool as structured JSON for analyze mode."""
     result = {"positive": [], "negative": []}
@@ -466,7 +571,7 @@ def main():
         return
 
     # Mode 3: Single card lookup
-    if query and config["positive_count"] == config["negative_count"] == 0:
+    if query and config["positive_count"] == 0 and config["negative_count"] == 0:
         card, card_type = find_trait(query, pos, neg)
         if card:
             print(format_single_card(card, card_type))
@@ -491,4 +596,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

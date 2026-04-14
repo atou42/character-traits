@@ -80,6 +80,7 @@ git clone https://git.talesofai.com/atou/character-traits.git ~/.claude/skills/c
 | `--no-tension` | flag | - | 关闭冲突张力保证 |
 | `--no-category` | flag | - | 关闭跨维度约束 |
 | `--no-similar` | flag | - | 关闭相似去重 |
+| `--no-side-conflict` | flag | - | 关闭同侧冲突避免 |
 | `--show DEPTH` | string | full | 输出深度：summary / full / compact |
 | `--analyze` | flag | - | 输出候选池 JSON，由 Claude 做推荐分析 |
 
@@ -98,6 +99,8 @@ git clone https://git.talesofai.com/atou/character-traits.git ~/.claude/skills/c
 - **张力保证**（默认开启）：至少一对正面 + 负面特质互为冲突特质，确保角色有内在矛盾
 - **跨维度**（默认开启）：正面特质覆盖至少 2 个性格维度（身份 / 互动 / 成就 / 道德）
 - **去重**（默认开启）：跳过 `similar_traits` 高度重叠的特质
+- **同侧冲突避免**（默认开启）：同一侧（正面/负面）内不会抽出互为冲突特质的组合，如勇敢+胆怯不会同时出现
+- **同侧冲突避免**（默认开启）：同一侧（正面/负面）内不会抽出互为冲突特质的组合，如勇敢+胆怯不会同时出现
 - **模糊匹配**：`conflicting_traits` 引用名与实际 key 有微小差异时自动匹配
 
 ## 项目结构
