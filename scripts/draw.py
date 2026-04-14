@@ -280,15 +280,19 @@ def draw_random(pos, neg, config):
     # Draw negatives
     neg_keys = []
 
-    # Tension: pick one negative from first positive's conflicting_traits
-    if config["ensure_tension"] and neg_count > 0:
-        conflicts = pos[pos_keys[0]].get("conflicting_traits", [])
-        conflicts = _normalize_conflicts(conflicts)
-        random.shuffle(conflicts)
-        for ct in conflicts:
-            match = fuzzy_match(ct, neg)
-            if match:
-                neg_keys.append(match)
+    # Tension: pick one negative from positive's conflicting_traits
+    # Try each positive until we find one that has a matching negative conflict
+    if config["ensure_tension"] and neg_count > 0 and pos_keys:
+        for pk in pos_keys:
+            conflicts = pos[pk].get("conflicting_traits", [])
+            conflicts = _normalize_conflicts(conflicts)
+            random.shuffle(conflicts)
+            for ct in conflicts:
+                match = fuzzy_match(ct, neg)
+                if match:
+                    neg_keys.append(match)
+                    break
+            if neg_keys:
                 break
 
     # Fill remaining negatives with same-side conflict avoidance
@@ -317,14 +321,17 @@ def draw_themed(query, pos, neg, config):
     neg_candidates = [k for k, _ in neg_scored[:top_n_neg]]
 
     neg_keys = []
-    # Try tension first
-    if config["ensure_tension"] and neg_count > 0:
-        conflicts = pos[pos_keys[0]].get("conflicting_traits", [])
-        conflicts = _normalize_conflicts(conflicts)
-        for ct in conflicts:
-            match = fuzzy_match(ct, neg)
-            if match and match in neg_candidates:
-                neg_keys.append(match)
+    # Try tension first — check each positive until one has a matching negative
+    if config["ensure_tension"] and neg_count > 0 and pos_keys:
+        for pk in pos_keys:
+            conflicts = pos[pk].get("conflicting_traits", [])
+            conflicts = _normalize_conflicts(conflicts)
+            for ct in conflicts:
+                match = fuzzy_match(ct, neg)
+                if match and match in neg_candidates:
+                    neg_keys.append(match)
+                    break
+            if neg_keys:
                 break
 
     remaining = [k for k in neg_candidates if k not in neg_keys]
