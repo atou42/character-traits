@@ -19,6 +19,7 @@ from draw import (
     load_data, parse_args, draw_random, draw_themed, draw_from_pool,
     has_conflict, _normalize_conflicts, fuzzy_match, find_trait,
     theme_match, format_output, format_single_card, format_candidates_json,
+    calc_tension, _cross_conflicts,
     VALID_CATS, TIER_PRESETS,
 )
 
@@ -756,6 +757,68 @@ def test_themed_draws_various():
             assert_test(False, f"themed '{q[:20]}' no crash", str(e))
 
 
+def test_tension_quantification():
+    """21. Tension score and cross-conflict pair detection."""
+    print("\n── 21. Tension Quantification ──")
+
+
+    pos, neg = load_data()
+    # calc_tension with no negative traits
+    result = calc_tension(["爱国的"], [], pos, neg)
+    assert_test(result["score"] == 0.0, "zero neg → score 0.0", f"got {result['score']}")
+    assert_test(result["max_possible"] == 0, "zero neg → max_possible 0", f"got {result['max_possible']}")
+
+    # calc_tension with no positive traits
+    result = calc_tension([], ["胆怯的"], pos, neg)
+    assert_test(result["score"] == 0.0, "zero pos → score 0.0", f"got {result['score']}")
+
+    # calc_tension with known conflicting pair
+    # "爱国的" has "不忠诚的" in its conflicting_traits
+    result = calc_tension(["爱国的"], ["不忠诚的"], pos, neg)
+    assert_test(result["score"] > 0.0, "known conflict pair → score > 0", f"got {result['score']}")
+    assert_test(len(result["pairs"]) >= 1, "known conflict pair → pairs non-empty", f"got {len(result['pairs'])}")
+    assert_test(result["max_possible"] == 1, "1x1 → max 1", f"got {result['max_possible']}")
+
+    # Score range for random draws
+    scores = []
+    for _ in range(100):
+        random.seed()
+        config = parse_args([])
+        pk, nk = draw_random(pos, neg, config)
+        t = calc_tension(pk, nk, pos, neg)
+        assert_test(0.0 <= t["score"] <= 1.0, f"score in [0,1]", f"got {t['score']}")
+        assert_test(t["max_possible"] == len(pk) * len(nk), "max_possible = pos*neg", f"{t['max_possible']} != {len(pk)}*{len(nk)}")
+        scores.append(t["score"])
+    avg = sum(scores) / len(scores) if scores else 0
+    assert_test(avg > 0.05, f"avg tension > 0.05", f"avg={avg:.3f}")
+
+    # _cross_conflicts detects bidirectional matches
+    pairs = _cross_conflicts(["爱国的"], ["不忠诚的"], pos, neg)
+    if pairs:
+        assert_test(pairs[0]["direction"] in ("pos→neg", "neg→pos", "bidirectional"),
+                     "direction is valid", f"got {pairs[0]['direction']}")
+
+    # Tension score in format_output (full mode)
+    config = parse_args([])
+    pk, nk = draw_random(pos, neg, config)
+    output = format_output(pos, neg, pk, nk, "full")
+    assert_test("张力得分" in output, "format_output full has 张力得分", "missing in output")
+    assert_test("张力指标" in output, "format_output full has 张力指标", "missing in output")
+
+    # Tension score in format_output (compact mode)
+    output_c = format_output(pos, neg, pk, nk, "compact")
+    assert_test("张力" in output_c, "format_output compact has 张力", "missing in output")
+    assert_test("张力指标" not in output_c, "compact has no 张力指标 section", "should be summary only")
+
+    # Score with zero-conflict positive traits
+    zero_conflict = ["天真无邪的", "外向的", "幸福的"]
+    for zc in zero_conflict:
+        if zc in pos:
+            result = calc_tension([zc], list(neg.keys())[:5], pos, neg)
+            assert_test(isinstance(result["score"], float), f"zero-conflict {zc} no crash", f"score={result['score']}")
+            break
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # RUN ALL
 # ═══════════════════════════════════════════════════════════════════════════
@@ -787,6 +850,7 @@ if __name__ == "__main__":
     test_high_count_stress()
     test_disabled_constraints()
     test_themed_draws_various()
+    test_tension_quantification()
 
     print(f"\n{'═' * 60}")
     print(f"  RESULTS: {passed} passed, {failed} failed")

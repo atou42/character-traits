@@ -124,6 +124,54 @@ def _normalize_conflicts(conflicts):
     return result
 
 
+def _cross_conflicts(pos_keys, neg_keys, pos, neg):
+    """Find all cross-side conflict pairs between positive and negative traits.
+
+    Returns a list of dicts: {"pos": str, "neg": str, "direction": "pos→neg"|"neg→pos"|"bidirectional"}
+    """
+    pairs = []
+    for pk in pos_keys:
+        p_conflicts = _normalize_conflicts(pos[pk].get("conflicting_traits", []))
+        for nk in neg_keys:
+            fwd = False
+            rev = False
+            # Forward: positive's conflicts mention this negative
+            if nk in p_conflicts:
+                fwd = True
+            else:
+                for c in p_conflicts:
+                    if len(c) >= 2 and (c in nk or nk in c):
+                        fwd = True
+                        break
+            # Reverse: negative's conflicts mention this positive
+            n_conflicts = _normalize_conflicts(neg[nk].get("conflicting_traits", []))
+            if pk in n_conflicts:
+                rev = True
+            else:
+                for c in n_conflicts:
+                    if len(c) >= 2 and (c in pk or pk in c):
+                        rev = True
+                        break
+            if fwd or rev:
+                direction = "bidirectional" if (fwd and rev) else ("pos→neg" if fwd else "neg→pos")
+                pairs.append({"pos": pk, "neg": nk, "direction": direction})
+    return pairs
+
+
+def calc_tension(pos_keys, neg_keys, pos, neg):
+    """Calculate tension score and conflict details for a draw result.
+
+    Returns {"score": float, "pairs": list, "max_possible": int}
+    score = actual_conflict_pairs / max_possible_pairs (0.0 ~ 1.0)
+    """
+    max_possible = len(pos_keys) * len(neg_keys)
+    if max_possible == 0:
+        return {"score": 0.0, "pairs": [], "max_possible": 0}
+    pairs = _cross_conflicts(pos_keys, neg_keys, pos, neg)
+    score = len(pairs) / max_possible
+    return {"score": round(score, 2), "pairs": pairs, "max_possible": max_possible}
+
+
 def has_conflict(key, existing_keys, trait_dict):
     """Check if key conflicts with any key in existing_keys via conflicting_traits."""
     raw_conflicts = trait_dict[key].get("conflicting_traits", [])
@@ -347,6 +395,11 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
     """Format the draw result as markdown."""
     lines = ["## 角色特质组合\n"]
 
+    # Compact mode: show inline tension score in header
+    if show_depth == "compact" and pos_keys and neg_keys:
+        tension = calc_tension(pos_keys, neg_keys, pos, neg)
+        lines.append(f"**张力**：{tension['score']}\n")
+
     lines.append("### 正面特质\n")
     for i, k in enumerate(pos_keys, 1):
         t = pos[k]
@@ -432,10 +485,28 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
                 if ho:
                     lines.append(f"- **克服路径**：{ho[:100]}")
 
-            # Check tension with positive traits
+            # Check tension with positive traits (fuzzy-aware)
             conflicts_with_pos = []
+            n_conflicts = _normalize_conflicts(t.get("conflicting_traits", []))
             for pk in pos_keys:
-                if pk in t.get("conflicting_traits", []):
+                found = False
+                if pk in n_conflicts:
+                    found = True
+                else:
+                    for c in n_conflicts:
+                        if len(c) >= 2 and (c in pk or pk in c):
+                            found = True
+                            break
+                if not found:
+                    p_conflicts = _normalize_conflicts(pos[pk].get("conflicting_traits", []))
+                    if k in p_conflicts:
+                        found = True
+                    else:
+                        for c in p_conflicts:
+                            if len(c) >= 2 and (c in k or k in c):
+                                found = True
+                                break
+                if found:
                     conflicts_with_pos.append(pk)
             if conflicts_with_pos:
                 lines.append(f"- **张力**：⚡ 与「{'、'.join(conflicts_with_pos)}」形成张力")
@@ -456,6 +527,22 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
             if scenarios:
                 name = pos[pos_keys[0]]['name_cn'].rstrip('的')
                 lines.append(f"- **{name}的考验情境**：{'；'.join(scenarios)}")
+
+    # Tension summary
+    if pos_keys and neg_keys and show_depth != "compact":
+        tension = calc_tension(pos_keys, neg_keys, pos, neg)
+        lines.append("### 张力指标\n")
+        n_conflicts = len(tension["pairs"])
+        max_p = tension["max_possible"]
+        lines.append(f"**张力得分**：{tension['score']}（{n_conflicts}/{max_p} 对冲突）\n")
+        if tension["pairs"]:
+            lines.append("| 正面 | 负面 | 方向 |")
+            lines.append("|------|------|------|")
+            for p in tension["pairs"]:
+                dir_label = "⚡↔" if p["direction"] == "bidirectional" else "⚡→" if p["direction"] == "pos→neg" else "←⚡"
+                lines.append(f"| {p['pos']} | {p['neg']} | {dir_label} |")
+            lines.append("")
+        lines.append("_0.0 = 无张力，1.0 = 全面对立。推荐区间 0.25–0.5_")
 
     return "\n".join(lines)
 
