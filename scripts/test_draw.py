@@ -1051,6 +1051,35 @@ def test_seed_reproducibility():
     assert_test(r1.returncode == 0, "CLI --seed exits 0", f"exit {r1.returncode}")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 26. SUMMARY MODE
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_summary_mode():
+    """26. --show summary is concise and complete."""
+    print("\n── 26. Summary Mode ──")
+    pos, neg = load_data()
+    config = parse_args([])
+    pk, nk = draw_random(pos, neg, config)
+
+    output_full = format_output(pos, neg, pk, nk, "full")
+    output_summary = format_output(pos, neg, pk, nk, "summary")
+
+    # Summary shorter than full
+    assert_test(len(output_summary) < len(output_full), "summary shorter than full",
+                f"summary={len(output_summary)}, full={len(output_full)}")
+
+    # Summary has key fields
+    assert_test("行为示例" in output_summary, "summary has behaviors", "missing 行为示例")
+    assert_test("正面" in output_summary, "summary has positive aspects", "missing 正面")
+
+    # Summary does NOT have verbose fields
+    assert_test("内心独白" not in output_summary, "summary no thoughts", "has 内心独白")
+    assert_test("关联情绪" not in output_summary, "summary no emotions", "has 关联情绪")
+    assert_test("可能成因" not in output_summary, "summary no causes", "has 可能成因")
+    assert_test("影视案例" not in output_summary, "summary no examples", "has 影视案例")
+
+
 # RUN ALL
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1086,6 +1115,7 @@ if __name__ == "__main__":
     test_cached_norm_conflicts()
     test_fuzzy_substring_helper()
     test_seed_reproducibility()
+    test_summary_mode()
 
     print(f"\n{'═' * 60}")
     print(f"  RESULTS: {passed} passed, {failed} failed")

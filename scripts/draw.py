@@ -452,7 +452,11 @@ def _render_trait_card(card, key, index, show_depth, card_type, pos_keys=None, p
         ex = card.get("examples", "")
         if ex:
             lines.append(f"- **影视案例**：{ex[:200]}")
-    else:  # summary mode
+    elif show_depth == "summary":
+        # Summary mode: full aspects, no verbose fields
+        lines.append(f"- **正面**：{pa}")
+        lines.append(f"- **负面**：{na}")
+    else:  # compact (shouldn't reach here due to early return)
         lines.append(f"- **正面**：{pa[:100]}")
         lines.append(f"- **负面**：{na[:100]}")
 
@@ -461,6 +465,7 @@ def _render_trait_card(card, key, index, show_depth, card_type, pos_keys=None, p
         cats = [c for c in card.get("category", []) if c in VALID_CATS]
         if cats:
             lines.append(f"- **维度**：{'、'.join(cats)}")
+        # Only show challenging_scenarios in full mode
         if show_depth == "full":
             scenarios = card.get("challenging_scenarios", [])
             if scenarios:
@@ -470,7 +475,12 @@ def _render_trait_card(card, key, index, show_depth, card_type, pos_keys=None, p
     if card_type == "negative":
         ho = card.get("how_to_overcome", "")
         if ho:
-            lines.append(f"- **克服路径**：{ho if show_depth == 'full' else ho[:100]}")
+            if show_depth == "full":
+                lines.append(f"- **克服路径**：{ho}")
+            elif show_depth == "summary":
+                lines.append(f"- **克服路径**：{ho}")
+            else:  # compact (shouldn't reach here)
+                lines.append(f"- **克服路径**：{ho[:100]}")
 
         # Tension annotation with positive traits
         if pos_keys and pos_dict:
