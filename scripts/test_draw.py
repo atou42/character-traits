@@ -935,6 +935,44 @@ def test_data_quality_adversarial():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+
+def test_cached_norm_conflicts():
+    """23. Verify _norm_conflicts is pre-computed and correct."""
+    print("\n── 23. Cached Normalized Conflicts ──")
+    pos, neg = load_data()
+
+    # Every card has _norm_conflicts
+    missing = 0
+    for k in pos:
+        if '_norm_conflicts' not in pos[k]:
+            missing += 1
+    assert_test(missing == 0, 'all positive traits have _norm_conflicts', f'{missing} missing')
+
+    missing_neg = 0
+    for k in neg:
+        if '_norm_conflicts' not in neg[k]:
+            missing_neg += 1
+    assert_test(missing_neg == 0, 'all negative traits have _norm_conflicts', f'{missing_neg} missing')
+
+    # Cached values match live computation
+    mismatch = 0
+    for k in pos:
+        expected = _normalize_conflicts(pos[k].get('conflicting_traits', []))
+        actual = pos[k].get('_norm_conflicts', [])
+        if expected != actual:
+            mismatch += 1
+            print(f'  MISMATCH pos {k}: expected={expected}, got={actual}')
+    assert_test(mismatch == 0, 'positive cached matches live', f'{mismatch} mismatches')
+
+    for k in neg:
+        expected = _normalize_conflicts(neg[k].get('conflicting_traits', []))
+        actual = neg[k].get('_norm_conflicts', [])
+        if expected != actual:
+            mismatch += 1
+            print(f'  MISMATCH neg {k}: expected={expected}, got={actual}')
+    assert_test(mismatch == 0, 'negative cached matches live', f'{mismatch} mismatches')
+
+
 # RUN ALL
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -967,6 +1005,7 @@ if __name__ == "__main__":
     test_themed_draws_various()
     test_tension_quantification()
     test_data_quality_adversarial()
+    test_cached_norm_conflicts()
 
     print(f"\n{'═' * 60}")
     print(f"  RESULTS: {passed} passed, {failed} failed")

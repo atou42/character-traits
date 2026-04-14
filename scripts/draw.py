@@ -24,6 +24,10 @@ def load_data():
         pos = json.load(f)
     with open(os.path.join(DATA_DIR, "negative.json"), encoding="utf-8") as f:
         neg = json.load(f)
+    # Pre-compute normalized conflicts for every trait (cached)
+    for d in (pos, neg):
+        for k in d:
+            d[k]["_norm_conflicts"] = _normalize_conflicts(d[k].get("conflicting_traits", []))
     return pos, neg
 
 
@@ -131,7 +135,7 @@ def _cross_conflicts(pos_keys, neg_keys, pos, neg):
     """
     pairs = []
     for pk in pos_keys:
-        p_conflicts = _normalize_conflicts(pos[pk].get("conflicting_traits", []))
+        p_conflicts = pos[pk].get("_norm_conflicts", [])
         for nk in neg_keys:
             fwd = False
             rev = False
@@ -144,7 +148,7 @@ def _cross_conflicts(pos_keys, neg_keys, pos, neg):
                         fwd = True
                         break
             # Reverse: negative's conflicts mention this positive
-            n_conflicts = _normalize_conflicts(neg[nk].get("conflicting_traits", []))
+            n_conflicts = neg[nk].get("_norm_conflicts", [])
             if pk in n_conflicts:
                 rev = True
             else:
@@ -174,8 +178,7 @@ def calc_tension(pos_keys, neg_keys, pos, neg):
 
 def has_conflict(key, existing_keys, trait_dict):
     """Check if key conflicts with any key in existing_keys via conflicting_traits."""
-    raw_conflicts = trait_dict[key].get("conflicting_traits", [])
-    conflicts = _normalize_conflicts(raw_conflicts)
+    conflicts = trait_dict[key].get("_norm_conflicts", [])
     for ek in existing_keys:
         # Direct match
         if ek in conflicts:
@@ -185,8 +188,7 @@ def has_conflict(key, existing_keys, trait_dict):
             if len(c) >= 2 and (c in ek or ek in c):
                 return True
         # Reverse: existing key's conflicts mention this key
-        ek_raw = trait_dict[ek].get("conflicting_traits", [])
-        ek_conflicts = _normalize_conflicts(ek_raw)
+        ek_conflicts = trait_dict[ek].get("_norm_conflicts", [])
         if key in ek_conflicts:
             return True
         for ec in ek_conflicts:
@@ -332,8 +334,7 @@ def draw_random(pos, neg, config):
     # Try each positive until we find one that has a matching negative conflict
     if config["ensure_tension"] and neg_count > 0 and pos_keys:
         for pk in pos_keys:
-            conflicts = pos[pk].get("conflicting_traits", [])
-            conflicts = _normalize_conflicts(conflicts)
+            conflicts = list(pos[pk].get("_norm_conflicts", []))
             random.shuffle(conflicts)
             for ct in conflicts:
                 match = fuzzy_match(ct, neg)
@@ -372,8 +373,7 @@ def draw_themed(query, pos, neg, config):
     # Try tension first — check each positive until one has a matching negative
     if config["ensure_tension"] and neg_count > 0 and pos_keys:
         for pk in pos_keys:
-            conflicts = pos[pk].get("conflicting_traits", [])
-            conflicts = _normalize_conflicts(conflicts)
+            conflicts = pos[pk].get("_norm_conflicts", [])
             for ct in conflicts:
                 match = fuzzy_match(ct, neg)
                 if match and match in neg_candidates:
@@ -487,7 +487,7 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
 
             # Check tension with positive traits (fuzzy-aware)
             conflicts_with_pos = []
-            n_conflicts = _normalize_conflicts(t.get("conflicting_traits", []))
+            n_conflicts = t.get("_norm_conflicts", [])
             for pk in pos_keys:
                 found = False
                 if pk in n_conflicts:
@@ -498,7 +498,7 @@ def format_output(pos, neg, pos_keys, neg_keys, show_depth):
                             found = True
                             break
                 if not found:
-                    p_conflicts = _normalize_conflicts(pos[pk].get("conflicting_traits", []))
+                    p_conflicts = pos[pk].get("_norm_conflicts", [])
                     if k in p_conflicts:
                         found = True
                     else:
