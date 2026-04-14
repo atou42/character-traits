@@ -44,6 +44,7 @@ def parse_args(argv):
         "show_depth": "full",
         "query": None,
         "analyze": False,
+        "seed": None,
     }
     i = 0
     while i < len(argv):
@@ -75,6 +76,9 @@ def parse_args(argv):
         elif arg == "--analyze":
             config["analyze"] = True
             i += 1
+        elif arg == "--seed" and i + 1 < len(argv):
+            config["seed"] = int(argv[i + 1])
+            i += 2
         elif not arg.startswith("--"):
             config["query"] = arg if config["query"] is None else config["query"] + " " + arg
             i += 1
@@ -657,6 +661,10 @@ def format_candidates_json(pos, neg, pos_keys, neg_keys):
 def main():
     config = parse_args(sys.argv[1:])
     pos, neg = load_data()
+
+    # Set random seed if provided
+    if config.get("seed") is not None:
+        random.seed(config["seed"])
 
     query = config.get("query")
 

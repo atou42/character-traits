@@ -1017,6 +1017,40 @@ def test_fuzzy_substring_helper():
     assert_test(_fuzzy_substring("", "test") == False, "empty string returns False")
     assert_test(_fuzzy_substring("test", "") == False, "empty string in second arg returns False")
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 25. SEED REPRODUCIBILITY
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_seed_reproducibility():
+    """25. --seed produces reproducible results."""
+    print("\n── 25. Seed Reproducibility ──")
+    pos, neg = load_data()
+
+    # Same seed → same results
+    random.seed(42)
+    config = parse_args([])
+    pk1, nk1 = draw_random(pos, neg, config)
+    random.seed(42)
+    pk2, nk2 = draw_random(pos, neg, config)
+    assert_test(pk1 == pk2, "same seed same pos_keys", f"{pk1} != {pk2}")
+    assert_test(nk1 == nk2, "same seed same neg_keys", f"{nk1} != {nk2}")
+
+    # Different seed → different results (almost certainly)
+    random.seed(42)
+    pk3, nk3 = draw_random(pos, neg, config)
+    random.seed(99)
+    pk4, nk4 = draw_random(pos, neg, config)
+    assert_test(pk3 != pk4 or nk3 != nk4, "different seeds differ", "got same results")
+
+    # CLI test
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "draw.py")
+    r1 = subprocess.run([sys.executable, script, "--seed", "42"], capture_output=True, text=True)
+    r2 = subprocess.run([sys.executable, script, "--seed", "42"], capture_output=True, text=True)
+    assert_test(r1.stdout == r2.stdout, "CLI same seed same output", "outputs differ")
+    assert_test(r1.returncode == 0, "CLI --seed exits 0", f"exit {r1.returncode}")
+
+
 # RUN ALL
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1051,6 +1085,7 @@ if __name__ == "__main__":
     test_data_quality_adversarial()
     test_cached_norm_conflicts()
     test_fuzzy_substring_helper()
+    test_seed_reproducibility()
 
     print(f"\n{'═' * 60}")
     print(f"  RESULTS: {passed} passed, {failed} failed")
