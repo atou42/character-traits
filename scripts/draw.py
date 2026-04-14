@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """角色特质抽卡脚本 — 从正面/负面特质卡中随机抽取组合"""
 
+
+__version__ = "1.0.0"
 import json
 import random
 import sys

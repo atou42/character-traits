@@ -1,4 +1,4 @@
-# 角色特质抽卡 (Character Trait Draw)
+# 角色特质抽卡 (Character Trait Draw) — v1.0.0
 
 基于 **200 张性格特质方法卡**（96 正面 + 104 负面）的 Claude Code Skill，为角色创作提供灵感和立体化参考。
 
@@ -82,6 +82,8 @@ git clone https://git.talesofai.com/atou/character-traits.git ~/.claude/skills/c
 | `--no-similar` | flag | - | 关闭相似去重 |
 | `--no-side-conflict` | flag | - | 关闭同侧冲突避免 |
 | `--show DEPTH` | string | full | 输出深度：summary / full / compact |
+| `--no-side-conflict` | flag | - | 关闭同侧冲突避免 |
+| `--seed N` | int | None | 固定随机种子，可复现结果 |
 | `--analyze` | flag | - | 输出候选池 JSON，由 Claude 做推荐分析 |
 
 ### 角色层级预设
@@ -138,7 +140,7 @@ Compact 模式下在标题旁直接显示分数：`**张力**：0.12`
 - **0 条重复引用** — 同一特质内无重复冲突条目
 - **≥80% 跨侧覆盖** — 超过 80% 的特质至少有一条跨侧（正→负或负→正）冲突引用
 
-以上约束由 2888 个对抗性测试断言持续守护。
+以上约束由 2924 个对抗性测试断言持续守护。
 
 ## 项目结构
 
@@ -146,12 +148,13 @@ Compact 模式下在标题旁直接显示分数：`**张力**：0.12`
 character-traits/
 ├── SKILL.md           # Claude Code Skill 定义
 ├── README.md          # 本文件
+├── CHANGELOG.md       # 变更日志
 ├── data/
 │   ├── positive.json  # 96 个正面特质
 │   └── negative.json  # 104 个负面特质
 └── scripts/
     ├── draw.py        # 抽卡引擎
-    └── test_draw.py   # 对抗性验证测试套件（2888 个断言）
+    └── test_draw.py   # 对抗性验证测试套件（27 区块 / 2924 断言）
 ```
 
 ## License
