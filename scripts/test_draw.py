@@ -819,6 +819,121 @@ def test_tension_quantification():
             break
 
 
+
+def test_data_quality_adversarial():
+    """22. Adversarial data quality: zero dangling refs, no prose, no splits, no single-char noise."""
+    print("\n── 22. Data Quality (Adversarial) ──")
+    pos, neg = load_data()
+    all_keys = set(pos.keys()) | set(neg.keys())
+
+    # 22a. Zero dangling conflicting_traits after normalize + fuzzy
+    dangling = 0
+    for side_name, side_dict in [("positive", pos), ("negative", neg)]:
+        for key, card in side_dict.items():
+            normed = _normalize_conflicts(card.get("conflicting_traits", []))
+            for ref in normed:
+                if ref in all_keys:
+                    continue
+                # fuzzy fallback
+                found = False
+                for k in all_keys:
+                    if len(ref) >= 2 and (ref in k or k in ref):
+                        found = True
+                        break
+                if not found:
+                    dangling += 1
+                    print(f"  DANGLING: {side_name} '{key}' -> '{ref}'")
+    assert_test(dangling == 0, "zero dangling conflicting_traits refs",
+                f"found {dangling} dangling refs")
+
+    # 22b. No single-char entries in raw conflicting_traits
+    single_char_count = 0
+    for side_name, side_dict in [("positive", pos), ("negative", neg)]:
+        for key, card in side_dict.items():
+            for ref in card.get("conflicting_traits", []):
+                if len(ref) <= 1:
+                    single_char_count += 1
+                    print(f"  SINGLE-CHAR: {side_name} '{key}' -> '{ref}'")
+    assert_test(single_char_count == 0, "no single-char entries in conflicting_traits",
+                f"found {single_char_count}")
+
+    # 22c. No prose/text fragments (entries containing Chinese punctuation)
+    # Exception: entries that are exact keys are valid (e.g. "古怪的，不可靠的")
+    prose_chars = set("。，、；：！？（）【】“”‘’…—《》\n")
+    prose_count = 0
+    for side_name, side_dict in [("positive", pos), ("negative", neg)]:
+        for key, card in side_dict.items():
+            for ref in card.get("conflicting_traits", []):
+                if any(c in prose_chars for c in ref):
+                    if ref in all_keys:
+                        continue  # valid key that happens to contain punctuation
+                    prose_count += 1
+                    print(f"  PROSE FRAGMENT: {side_name} '{key}' -> '{ref}'")
+    assert_test(prose_count == 0, "no prose fragments in conflicting_traits",
+                f"found {prose_count}")
+
+    # 22d. No English annotations in conflicting_traits (e.g., "反社会的 Antisocial")
+    import re
+    english_count = 0
+    for side_name, side_dict in [("positive", pos), ("negative", neg)]:
+        for key, card in side_dict.items():
+            for ref in card.get("conflicting_traits", []):
+                if re.search(r'[A-Za-z]{3,}', ref):
+                    english_count += 1
+                    print(f"  ENGLISH IN REF: {side_name} '{key}' -> '{ref}'")
+    assert_test(english_count == 0, "no English annotations in conflicting_traits",
+                f"found {english_count}")
+
+    # 22e. Every conflict ref after normalize is >= 2 chars
+    short_count = 0
+    for side_name, side_dict in [("positive", pos), ("negative", neg)]:
+        for key, card in side_dict.items():
+            for ref in _normalize_conflicts(card.get("conflicting_traits", [])):
+                if len(ref) < 2:
+                    short_count += 1
+                    print(f"  SHORT REF: {side_name} '{key}' -> '{ref}'")
+    assert_test(short_count == 0, "all normalized refs >= 2 chars",
+                f"found {short_count}")
+
+    # 22f. No duplicate entries within a single trait's conflicting_traits (after normalize)
+    dup_count = 0
+    for side_name, side_dict in [("positive", pos), ("negative", neg)]:
+        for key, card in side_dict.items():
+            normed = _normalize_conflicts(card.get("conflicting_traits", []))
+            seen = set()
+            for ref in normed:
+                if ref in seen:
+                    dup_count += 1
+                    print(f"  DUP CONFLICT: {side_name} '{key}' -> '{ref}'")
+                seen.add(ref)
+    assert_test(dup_count == 0, "no duplicate conflict refs within a trait",
+                f"found {dup_count} duplicates")
+
+    # 22g. Cross-side conflict graph: at least 80% of traits have at least one cross-side conflict
+    cross_coverage = 0
+    total = 0
+    for side_name, side_dict, other_dict in [("positive", pos, neg), ("negative", neg, pos)]:
+        for key, card in side_dict.items():
+            total += 1
+            normed = _normalize_conflicts(card.get("conflicting_traits", []))
+            has_cross = False
+            for ref in normed:
+                if ref in other_dict:
+                    has_cross = True
+                    break
+                for ok in other_dict:
+                    if len(ref) >= 2 and (ref in ok or ok in ref):
+                        has_cross = True
+                        break
+                if has_cross:
+                    break
+            if has_cross:
+                cross_coverage += 1
+    coverage_pct = cross_coverage / total if total > 0 else 0
+    assert_test(coverage_pct >= 0.8, f"cross-side conflict coverage >= 80%",
+                f"got {coverage_pct:.1%} ({cross_coverage}/{total})")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # RUN ALL
 # ═══════════════════════════════════════════════════════════════════════════
@@ -851,6 +966,7 @@ if __name__ == "__main__":
     test_disabled_constraints()
     test_themed_draws_various()
     test_tension_quantification()
+    test_data_quality_adversarial()
 
     print(f"\n{'═' * 60}")
     print(f"  RESULTS: {passed} passed, {failed} failed")
