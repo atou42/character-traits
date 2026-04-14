@@ -1017,6 +1017,11 @@ def test_fuzzy_substring_helper():
     assert_test(_fuzzy_substring("", "test") == False, "empty string returns False")
     assert_test(_fuzzy_substring("test", "") == False, "empty string in second arg returns False")
 
+    # Ratio check: short strings shouldn't match much longer ones
+    assert_test(not _fuzzy_substring("观", "悲观多疑的"), "single char blocked by min_len", "")
+    assert_test(_fuzzy_substring("悲观的", "对人性悲观的"), "reasonable substring matches", "")
+    assert_test(not _fuzzy_substring("的", "有道德的"), "single char blocked", "")
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 25. SEED REPRODUCIBILITY

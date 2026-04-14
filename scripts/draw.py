@@ -97,10 +97,14 @@ def parse_args(argv):
 
 
 def _fuzzy_substring(a, b, min_len=2):
-    """Check if a is substring of b or b is substring of a."""
-    if not a or not b:
+    """Check if a is substring of b or b is substring of a, with minimum length and ratio."""
+    if not a or not b or len(a) < min_len:
         return False
-    return len(a) >= min_len and (a in b or b in a)
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    # Apply ratio check only when both strings are at least 2 chars
+    if len(shorter) >= 2 and len(longer) >= 2 and len(shorter) / len(longer) < 0.4:
+        return False
+    return a in b or b in a
 
 
 def _truncate(text, limit):
