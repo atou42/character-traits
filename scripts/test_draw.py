@@ -116,6 +116,12 @@ def test_data_integrity():
     empty_def_pos = [k for k in pos if not pos[k].get("definition", "").strip()]
     assert_test(len(empty_def_pos) == 0, "no empty pos definition", f"empty: {empty_def_pos}")
 
+    empty_name_en_neg = [k for k in neg if not neg[k].get("name_en", "").strip()]
+    assert_test(len(empty_name_en_neg) == 0, "no empty neg name_en", f"empty: {empty_name_en_neg}")
+    empty_def_neg = [k for k in neg if not neg[k].get("definition", "").strip()]
+    assert_test(len(empty_def_neg) == 0, "no empty neg definition", f"empty: {empty_def_neg}")
+
+
     # No empty conflicting_traits (all traits should have at least one)
     # Not a hard requirement — but log it
     zero_conf_pos = [k for k in pos if not _normalize_conflicts(pos[k].get("conflicting_traits", []))]
